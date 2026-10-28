@@ -346,6 +346,14 @@ async def load_state():
             if isinstance(data.get("worker_domain"), dict):
                 CF_DOMAIN.update(data["worker_domain"])
                 CF_DOMAIN["deploying"] = False
+                # Earlier builds stored custom_domain as a boolean and used
+                # `domain` for the selected hostname. Keep that hostname as
+                # the effective custom domain while migrating the flag.
+                if isinstance(CF_DOMAIN.get("custom_domain"), bool):
+                    was_custom = bool(CF_DOMAIN.get("custom_domain"))
+                    CF_DOMAIN["custom_domain"] = str(CF_DOMAIN.get("domain") or "") if was_custom else ""
+                if not CF_DOMAIN.get("worker_dev_domain") and not CF_DOMAIN.get("custom_domain"):
+                    CF_DOMAIN["worker_dev_domain"] = str(CF_DOMAIN.get("domain") or "")
                 if not CF_DOMAIN.get("token") or not CF_DOMAIN.get("account_id") or not CF_DOMAIN.get("script_name") or not CF_DOMAIN.get("domain"):
                     CF_DOMAIN["connected"] = False
             if isinstance(data.get("worker"), dict):
@@ -760,7 +768,7 @@ VERCEL: dict = {
 VERCEL_LOCK = asyncio.Lock()
 
 # Standalone Cloudflare Workers relay, separate from the existing Pages worker.
-CF_DOMAIN: dict = {"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "url": "", "custom_domain": False, "created_at": "", "last_error": ""}
+CF_DOMAIN: dict = {"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "worker_dev_domain": "", "url": "", "custom_domain": "", "created_at": "", "last_error": ""}
 CF_DOMAIN_LOCK = asyncio.Lock()
 
 # ── Telegram Bot automation ─────────────────────────────────────────────────
@@ -13626,6 +13634,8 @@ async def vercel_domain_delete(_=Depends(require_auth)):
 def _worker_domain_public() -> dict:
     connected = bool(CF_DOMAIN.get("connected") and CF_DOMAIN.get("domain"))
     domain = _vercel_normalize_domain(CF_DOMAIN.get("domain") or "") if connected else ""
+    worker_dev_domain = _vercel_normalize_domain(CF_DOMAIN.get("worker_dev_domain") or (domain if domain.endswith(".workers.dev") else "")) if connected else ""
+    custom_domain = _vercel_normalize_domain(CF_DOMAIN.get("custom_domain") or "") if connected else ""
     configs = []
     if domain:
         for uid, user in sorted(USERS.items(), key=lambda item: str((item[1].get("username") if isinstance(item[1], dict) else "") or item[0]).casefold()):
@@ -13633,7 +13643,27 @@ def _worker_domain_public() -> dict:
                 config = _vercel_config_for_user(str(uid), user, domain).replace("%20Vercel", "%20Cloudflare%20Worker")
                 if config:
                     configs.append({"user_id": str(uid), "username": str(user.get("username") or uid), "active": str(user.get("status") or "active").lower() == "active", "config": config})
-    return {"ok": True, "connected": connected, "domain": domain, "url": CF_DOMAIN.get("url") or (f"https://{domain}" if domain else ""), "account_id": CF_DOMAIN.get("account_id", ""), "script_name": CF_DOMAIN.get("script_name", ""), "custom_domain": bool(CF_DOMAIN.get("custom_domain")), "created_at": CF_DOMAIN.get("created_at", ""), "last_error": CF_DOMAIN.get("last_error", ""), "configs": configs}
+    return {"ok": True, "connected": connected, "domain": domain, "worker_dev_domain": worker_dev_domain, "url": f"https://{domain}" if domain else "", "account_id": CF_DOMAIN.get("account_id", ""), "script_name": CF_DOMAIN.get("script_name", ""), "custom_domain": custom_domain, "created_at": CF_DOMAIN.get("created_at", ""), "last_error": CF_DOMAIN.get("last_error", ""), "configs": configs}
+
+
+async def _upload_worker_domain_script(token: str, account_id: str, script_name: str) -> None:
+    target_domain = _vercel_normalize_domain(get_host())
+    if not target_domain:
+        raise ValueError("The public panel domain could not be detected")
+    source_path = Path(os.path.dirname(os.path.abspath(__file__))) / "deploy" / "cloudflare" / "worker-domain.js"
+    source = source_path.read_text(encoding="utf-8").replace("__TARGET_DOMAIN__", json.dumps(target_domain)).replace("__RELAY_PATH__", json.dumps("/ws/vl"))
+    metadata = json.dumps({"main_module": "index.js", "compatibility_date": "2026-09-18"})
+    boundary = "----SpiderWorker" + secrets.token_hex(12)
+    multipart = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"metadata\"\r\nContent-Type: application/json\r\n\r\n{metadata}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"index.js\"; filename=\"index.js\"\r\nContent-Type: application/javascript+module\r\n\r\n{source}\r\n--{boundary}--\r\n").encode()
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": f"multipart/form-data; boundary={boundary}", "User-Agent": "Spider-Panel"}
+    async with httpx.AsyncClient(timeout=90) as client:
+        upload = await client.put(f"{CF_API}/accounts/{account_id}/workers/scripts/{script_name}", headers=headers, content=multipart)
+    try:
+        result = upload.json() if upload.content else {}
+    except Exception:
+        result = {}
+    if upload.status_code not in (200, 201) or not result.get("success", True):
+        raise ValueError("Worker upload failed: " + str(result.get("errors") or upload.text)[:500])
 
 
 @app.get("/api/system/worker-domain")
@@ -13657,8 +13687,6 @@ async def worker_domain_zones(request: Request, _=Depends(require_auth)):
 async def worker_domain_deploy(request: Request, _=Depends(require_auth)):
     body = await request.json()
     token = str(body.get("token") or "").strip()
-    zone_id = str(body.get("zone_id") or "").strip()
-    selected_account_id = str(body.get("account_id") or "").strip()
     if not token or len(token) > 4096:
         raise HTTPException(status_code=400, detail="A valid Cloudflare API token is required")
     async with CF_DOMAIN_LOCK:
@@ -13666,55 +13694,24 @@ async def worker_domain_deploy(request: Request, _=Depends(require_auth)):
             raise HTTPException(status_code=409, detail="A Worker Domain is already connected. Delete it before creating another one.")
         CF_DOMAIN.update({"deploying": True, "last_error": ""})
     script_name = "spider-relay-" + secrets.token_hex(4)
-    custom = bool(zone_id)
     try:
         code, data = await _cf_api("GET", "/user/tokens/verify", token)
         if code != 200 or not isinstance(data, dict) or not data.get("success"):
             raise ValueError("Cloudflare token rejected")
         acode, adata = await _cf_api("GET", "/accounts?per_page=50", token)
         accounts = (adata.get("result") or []) if isinstance(adata, dict) else []
-        account_id = selected_account_id if custom and selected_account_id else (str((accounts[0] or {}).get("id") or "") if accounts else "")
+        account_id = str((accounts[0] or {}).get("id") or "") if accounts else ""
         if not account_id:
             raise ValueError("No Cloudflare account is available to this token")
-        zone = {}
-        if custom:
-            zcode, zdata = await _cf_api("GET", f"/zones/{zone_id}", token)
-            zone = (zdata.get("result") or {}) if isinstance(zdata, dict) else {}
-            if zcode != 200 or not zone.get("name") or zone.get("status") != "active" or str((zone.get("account") or {}).get("id") or "") != account_id:
-                raise ValueError("Selected Cloudflare domain is unavailable for this account")
-        source_path = Path(os.path.dirname(os.path.abspath(__file__))) / "deploy" / "cloudflare" / "worker-domain.js"
-        source = source_path.read_text(encoding="utf-8").replace("__TARGET_DOMAIN__", json.dumps(_vercel_normalize_domain(get_host()))).replace("__RELAY_PATH__", json.dumps("/ws/vl"))
-        if not _vercel_normalize_domain(get_host()):
-            raise ValueError("The public panel domain could not be detected")
-        metadata = json.dumps({"main_module": "index.js", "compatibility_date": "2026-09-18"})
-        boundary = "----SpiderWorker" + secrets.token_hex(12)
-        multipart = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"metadata\"\r\nContent-Type: application/json\r\n\r\n{metadata}\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"index.js\"; filename=\"index.js\"\r\nContent-Type: application/javascript+module\r\n\r\n{source}\r\n--{boundary}--\r\n").encode()
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": f"multipart/form-data; boundary={boundary}", "User-Agent": "Spider-Panel"}
-        async with httpx.AsyncClient(timeout=90) as client:
-            upload = await client.put(f"{CF_API}/accounts/{account_id}/workers/scripts/{script_name}", headers=headers, content=multipart)
-        updata = upload.json() if upload.content else {}
-        if upload.status_code not in (200, 201) or not updata.get("success", True):
-            raise ValueError("Worker upload failed: " + str(updata.get("errors") or upload.text)[:300])
-        if custom:
-            zone_name = str(zone.get("name") or "")
-            # A one-letter random subdomain keeps the requested hostname short.
-            hostname = random.choice("abcdefghijklmnopqrstuvwxyz") + "." + zone_name
-            dcode, ddata = await _cf_api("POST", f"/accounts/{account_id}/workers/domains", token, {"hostname": hostname, "service": script_name, "environment": "production"})
-            if dcode not in (200, 201) or not isinstance(ddata, dict) or not ddata.get("success"):
-                raise ValueError("Custom domain setup failed: " + str((ddata.get("errors") or [{}])[0].get("message") or ddata)[:250])
-            domain = hostname
-        else:
-            await _cf_api("PUT", f"/accounts/{account_id}/workers/scripts/{script_name}/subdomain", token, {"enabled": True, "previews_enabled": False})
-            domain = f"{script_name}.{str((accounts[0] or {}).get('name') or '').lower().replace(' ', '')}.workers.dev"
-            # Account display name is not the workers.dev subdomain; query the account's workers.dev subdomain.
-            scode, sdata = await _cf_api("GET", f"/accounts/{account_id}/workers/subdomain", token)
-            subdomain = str(((sdata.get("result") or {}).get("subdomain")) if isinstance(sdata, dict) else "")
-            if scode == 200 and subdomain:
-                domain = f"{script_name}.{subdomain}.workers.dev"
-            else:
-                raise ValueError("Could not resolve your workers.dev domain. Choose Custom domain instead.")
+        await _upload_worker_domain_script(token, account_id, script_name)
+        await _cf_api("PUT", f"/accounts/{account_id}/workers/scripts/{script_name}/subdomain", token, {"enabled": True, "previews_enabled": False})
+        scode, sdata = await _cf_api("GET", f"/accounts/{account_id}/workers/subdomain", token)
+        subdomain = str(((sdata.get("result") or {}).get("subdomain")) if isinstance(sdata, dict) else "")
+        if scode != 200 or not subdomain:
+            raise ValueError("Could not resolve your workers.dev domain")
+        domain = f"{script_name}.{subdomain}.workers.dev"
         async with CF_DOMAIN_LOCK:
-            CF_DOMAIN.update({"connected": True, "deploying": False, "token": token, "account_id": account_id, "script_name": script_name, "domain": domain, "url": f"https://{domain}", "custom_domain": custom, "created_at": now_ir().isoformat(timespec="seconds"), "last_error": ""})
+            CF_DOMAIN.update({"connected": True, "deploying": False, "token": token, "account_id": account_id, "script_name": script_name, "domain": domain, "worker_dev_domain": domain, "url": f"https://{domain}", "custom_domain": "", "created_at": now_ir().isoformat(timespec="seconds"), "last_error": ""})
         await save_state()
         return _worker_domain_public()
     except Exception as exc:
@@ -13728,6 +13725,79 @@ async def worker_domain_deploy(request: Request, _=Depends(require_auth)):
         await save_state()
         status = 400 if "token" in str(exc).lower() or "domain" in str(exc).lower() else 502
         raise HTTPException(status_code=status, detail=str(exc))
+
+
+@app.put("/api/system/worker-domain")
+async def worker_domain_update(_=Depends(require_auth)):
+    async with CF_DOMAIN_LOCK:
+        token = str(CF_DOMAIN.get("token") or "")
+        account_id = str(CF_DOMAIN.get("account_id") or "")
+        script_name = str(CF_DOMAIN.get("script_name") or "")
+        if not (CF_DOMAIN.get("connected") and token and account_id and script_name):
+            raise HTTPException(status_code=400, detail="No Worker Domain is connected")
+        if CF_DOMAIN.get("deploying"):
+            raise HTTPException(status_code=409, detail="Worker deployment is already in progress")
+        CF_DOMAIN["deploying"] = True
+        CF_DOMAIN["last_error"] = ""
+    try:
+        await _upload_worker_domain_script(token, account_id, script_name)
+        async with CF_DOMAIN_LOCK:
+            CF_DOMAIN.update({"deploying": False, "last_error": "", "updated_at": now_ir().isoformat(timespec="seconds")})
+        await save_state()
+        return _worker_domain_public()
+    except Exception as exc:
+        async with CF_DOMAIN_LOCK:
+            CF_DOMAIN.update({"deploying": False, "last_error": str(exc)[:500]})
+        await save_state()
+        raise HTTPException(status_code=502, detail=str(exc))
+
+
+@app.post("/api/system/worker-domain/custom-domain")
+async def worker_domain_add_custom(request: Request, _=Depends(require_auth)):
+    body = await request.json()
+    zone_id = str(body.get("zone_id") or "").strip()
+    token, account_id = str(CF_DOMAIN.get("token") or ""), str(CF_DOMAIN.get("account_id") or "")
+    script_name = str(CF_DOMAIN.get("script_name") or "")
+    if not (CF_DOMAIN.get("connected") and token and account_id and script_name):
+        raise HTTPException(status_code=400, detail="Deploy a Worker before adding a custom domain")
+    if CF_DOMAIN.get("custom_domain"):
+        raise HTTPException(status_code=409, detail="A custom domain is already connected")
+    zcode, zdata = await _cf_api("GET", f"/zones/{zone_id}", token)
+    zone = (zdata.get("result") or {}) if isinstance(zdata, dict) else {}
+    if zcode != 200 or not zone.get("name") or zone.get("status") != "active" or str((zone.get("account") or {}).get("id") or "") != account_id:
+        raise HTTPException(status_code=400, detail="Selected Cloudflare domain is unavailable for this account")
+    zone_name = str(zone["name"])
+    errors = []
+    for letter in random.sample("abcdefghijklmnopqrstuvwxyz", 26):
+        hostname = f"{letter}.{zone_name}"
+        code, data = await _cf_api("POST", f"/accounts/{account_id}/workers/domains", token, {"hostname": hostname, "service": script_name, "environment": "production"})
+        if code in (200, 201) and isinstance(data, dict) and data.get("success"):
+            CF_DOMAIN.update({"custom_domain": hostname, "domain": hostname, "url": f"https://{hostname}"})
+            await save_state()
+            return _worker_domain_public()
+        errors.append(str(((data.get("errors") or [{}])[0].get("message") if isinstance(data, dict) else "") or ""))
+    raise HTTPException(status_code=502, detail="Could not add a random subdomain: " + (errors[-1] if errors else "Cloudflare rejected the request")[:250])
+
+
+@app.delete("/api/system/worker-domain/custom-domain")
+async def worker_domain_remove_custom(_=Depends(require_auth)):
+    token, account_id = str(CF_DOMAIN.get("token") or ""), str(CF_DOMAIN.get("account_id") or "")
+    custom_domain = str(CF_DOMAIN.get("custom_domain") or "")
+    if not (CF_DOMAIN.get("connected") and token and account_id and custom_domain):
+        raise HTTPException(status_code=400, detail="No custom domain is connected")
+    code, data = await _cf_api("DELETE", f"/accounts/{account_id}/workers/domains/{custom_domain}", token)
+    if code not in (200, 204) and not (isinstance(data, dict) and data.get("success")):
+        raise HTTPException(status_code=502, detail="Cloudflare could not remove the custom domain")
+    base_domain = str(CF_DOMAIN.get("worker_dev_domain") or "")
+    if not base_domain:
+        scode, sdata = await _cf_api("GET", f"/accounts/{account_id}/workers/subdomain", token)
+        subdomain = str(((sdata.get("result") or {}).get("subdomain")) if isinstance(sdata, dict) else "")
+        if scode != 200 or not subdomain:
+            raise HTTPException(status_code=502, detail="Custom domain was removed, but workers.dev fallback could not be resolved")
+        base_domain = f"{CF_DOMAIN.get('script_name')}.{subdomain}.workers.dev"
+    CF_DOMAIN.update({"custom_domain": "", "domain": base_domain, "worker_dev_domain": base_domain, "url": f"https://{base_domain}"})
+    await save_state()
+    return _worker_domain_public()
 
 
 @app.delete("/api/system/worker-domain")
@@ -13744,7 +13814,7 @@ async def worker_domain_delete(_=Depends(require_auth)):
     if code not in (200, 204) and not (isinstance(data, dict) and data.get("success")):
         raise HTTPException(status_code=502, detail="Cloudflare could not delete the Worker")
     async with CF_DOMAIN_LOCK:
-        CF_DOMAIN.update({"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "url": "", "custom_domain": False, "created_at": "", "last_error": ""})
+        CF_DOMAIN.update({"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "worker_dev_domain": "", "url": "", "custom_domain": "", "created_at": "", "last_error": ""})
     await save_state()
     return _worker_domain_public()
 

@@ -2531,23 +2531,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
             <div class="px-hint" data-i18n="workerDomain.tokenHint">Token is kept server-side and never returned to your browser.</div>
             <div class="vd-actions">
               <button id="wd-deploy-btn" type="button" class="btn btn-p" onclick="deployWorkerDomain(false)"><span class="material-symbols-outlined" style="font-size:16px">rocket_launch</span><span data-i18n="workerDomain.deploy">Deploy to workers.dev</span></button>
-              <button id="wd-custom-btn" type="button" class="btn btn-g" onclick="toggleWorkerDomainMenu()"><span class="material-symbols-outlined" style="font-size:16px">language</span><span data-i18n="workerDomain.custom">Custom domain</span></button>
               <button type="button" class="btn btn-g btn-sm" onclick="loadWorkerDomain()"><span data-i18n="workerDomain.refresh">Refresh</span></button>
-            </div>
-            <div id="wd-zone-menu" class="hidden" style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2)">
-              <label data-i18n="workerDomain.chooseZone">Choose a Cloudflare domain</label>
-              <select id="wd-zone-select" style="width:100%;margin-top:6px"></select>
-              <button type="button" class="btn btn-p" style="margin-top:8px" onclick="deployWorkerDomain(true)" data-i18n="workerDomain.deployCustom">Create random subdomain and deploy</button>
             </div>
           </div>
           <div id="wd-managed" class="hidden" style="margin-top:12px">
             <div class="set-row"><span class="set-lbl" data-i18n="workerDomain.domain">Worker domain</span><a id="wd-domain" href="#" target="_blank" rel="noopener" dir="ltr" class="vd-domain">—</a></div>
             <div class="set-row"><span class="set-lbl" data-i18n="workerDomain.script">Worker script</span><span id="wd-script" dir="ltr" style="font:12px monospace;color:var(--txt)">—</span></div>
             <div class="vd-actions">
+              <button id="wd-update-btn" type="button" class="btn btn-p" onclick="updateWorkerDomain()"><span class="material-symbols-outlined" style="font-size:16px">sync</span><span data-i18n="workerDomain.update">Update Worker</span></button>
               <button id="wd-ping-btn" type="button" class="btn btn-p" onclick="pingWorkerDomain()"><span class="material-symbols-outlined" style="font-size:16px">network_ping</span><span data-i18n="workerDomain.ping">Ping from my internet</span></button>
               <button type="button" class="btn btn-g btn-sm" onclick="loadWorkerDomain()"><span data-i18n="workerDomain.refresh">Refresh</span></button>
               <button type="button" class="btn btn-r btn-sm" onclick="deleteWorkerDomain()"><span class="material-symbols-outlined" style="font-size:16px">delete</span><span data-i18n="workerDomain.delete">Delete Worker</span></button>
             </div>
+            <div class="set-row" id="wd-custom-row"><span class="set-lbl" data-i18n="workerDomain.custom">Custom domain</span><span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><a id="wd-custom-domain" href="#" target="_blank" rel="noopener" dir="ltr" class="vd-domain hidden"></a><button id="wd-add-custom-btn" type="button" class="btn btn-g btn-sm" onclick="toggleWorkerCustomDomainMenu()" data-i18n="workerDomain.addCustom">Add custom domain</button><button id="wd-delete-custom-btn" type="button" class="btn btn-r btn-sm hidden" onclick="deleteWorkerCustomDomain()" data-i18n="workerDomain.removeCustom">Remove</button></span></div>
+            <div id="wd-custom-menu" class="hidden" style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg2)"><label data-i18n="workerDomain.chooseZone">Choose a Cloudflare domain</label><select id="wd-custom-zone-select" style="width:100%;margin-top:6px"></select><button type="button" class="btn btn-p" style="margin-top:8px" onclick="addWorkerCustomDomain()" data-i18n="workerDomain.createCustom">Create random subdomain</button></div>
             <div class="vd-status" id="wd-ping-result" role="status" aria-live="polite"></div>
             <div class="panel-h" style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;justify-content:space-between"><span class="glow" data-i18n="workerDomain.configTitle">Worker configuration</span><span id="wd-config-count" class="badge badge-g">0</span></div>
             <div class="f-g" style="margin-top:10px"><label data-i18n="workerDomain.user">User</label><select id="wd-user-select" onchange="selectWorkerDomainConfig()" style="width:100%"></select></div>
@@ -3264,10 +3261,10 @@ Object.assign(I18N.en, {
   'vercelDomain.clientPingResult': 'Browser ping: median {median} ms · min {min} ms · max {max} ms · successful samples {samples}/4'
 });
 Object.assign(I18N.fa, {
-  'workerDomain.nav':'Worker Domain','workerDomain.title':'دامنه Cloudflare Worker','workerDomain.token':'توکن API کلادفلر','workerDomain.getToken':'دریافت توکن','workerDomain.tokenHint':'توکن فقط روی سرور ذخیره می‌شود و به مرورگر برگردانده نمی‌شود.','workerDomain.deploy':'Deploy روی workers.dev','workerDomain.custom':'دامنه سفارشی','workerDomain.refresh':'بروزرسانی','workerDomain.chooseZone':'دامنه کلادفلر را انتخاب کنید','workerDomain.deployCustom':'ساخت ساب‌دامنه تصادفی و Deploy','workerDomain.domain':'دامنه Worker','workerDomain.script':'اسکریپت Worker','workerDomain.delete':'حذف Worker','workerDomain.configTitle':'کانفیگ Worker','workerDomain.user':'کاربر','workerDomain.noUsers':'کانفیگ معتبری برای کاربری پیدا نشد.','workerDomain.copyConfig':'کپی کانفیگ','workerDomain.enterToken':'ابتدا توکن Cloudflare را وارد کنید.','workerDomain.deploying':'در حال Deploy در Cloudflare…','workerDomain.created':'Worker ساخته و Deploy شد.','workerDomain.noZones':'دامنه فعالی در حساب پیدا نشد.','workerDomain.confirmDelete':'Worker و دامنه متصل آن حذف شود؟','workerDomain.deleted':'Worker حذف شد.','workerDomain.noConfig':'کانفیگی برای کپی وجود ندارد.','workerDomain.ping':'پینگ از اینترنت من','workerDomain.pinging':'در حال پینگ…','workerDomain.pingFailed':'پینگ ناموفق بود؛ دامنه، DNS یا TLS را بررسی کنید.','workerDomain.pingResult':'پینگ مرورگر: میانه {median} ms · کمینه {min} ms · بیشینه {max} ms · نمونه موفق {samples}/4','workerDomain.notConnected':'ابتدا Worker Domain را Deploy کنید.'
+  'workerDomain.nav':'Worker Domain','workerDomain.title':'دامنه Cloudflare Worker','workerDomain.token':'توکن API کلادفلر','workerDomain.getToken':'دریافت توکن','workerDomain.tokenHint':'توکن فقط روی سرور ذخیره می‌شود و به مرورگر برگردانده نمی‌شود.','workerDomain.deploy':'Deploy روی workers.dev','workerDomain.custom':'دامنه سفارشی','workerDomain.addCustom':'افزودن دامنه سفارشی','workerDomain.removeCustom':'حذف دامنه','workerDomain.createCustom':'ساخت ساب‌دامنه تصادفی','workerDomain.addingCustom':'در حال افزودن دامنه سفارشی…','workerDomain.customAdded':'دامنه سفارشی به Worker اضافه شد.','workerDomain.confirmRemoveCustom':'دامنه سفارشی از Worker حذف شود؟','workerDomain.customRemoved':'دامنه سفارشی حذف شد؛ کانفیگ به workers.dev برگشت.','workerDomain.refresh':'بروزرسانی','workerDomain.chooseZone':'دامنه کلادفلر را انتخاب کنید','workerDomain.deployCustom':'ساخت ساب‌دامنه تصادفی و Deploy','workerDomain.domain':'دامنه Worker','workerDomain.script':'اسکریپت Worker','workerDomain.update':'بروزرسانی Worker','workerDomain.updated':'Worker به‌روزرسانی و Deploy شد.','workerDomain.delete':'حذف Worker','workerDomain.configTitle':'کانفیگ Worker','workerDomain.user':'کاربر','workerDomain.noUsers':'کانفیگ معتبری برای کاربری پیدا نشد.','workerDomain.copyConfig':'کپی کانفیگ','workerDomain.enterToken':'ابتدا توکن Cloudflare را وارد کنید.','workerDomain.deploying':'در حال Deploy در Cloudflare…','workerDomain.created':'Worker ساخته و Deploy شد.','workerDomain.noZones':'دامنه فعالی در حساب پیدا نشد.','workerDomain.confirmDelete':'Worker و دامنه متصل آن حذف شود؟','workerDomain.deleted':'Worker حذف شد.','workerDomain.noConfig':'کانفیگی برای کپی وجود ندارد.','workerDomain.ping':'پینگ از اینترنت من','workerDomain.pinging':'در حال پینگ…','workerDomain.pingFailed':'پینگ ناموفق بود؛ دامنه، DNS یا TLS را بررسی کنید.','workerDomain.pingResult':'پینگ مرورگر: میانه {median} ms · کمینه {min} ms · بیشینه {max} ms · نمونه موفق {samples}/4','workerDomain.notConnected':'ابتدا Worker Domain را Deploy کنید.'
 });
 Object.assign(I18N.en, {
-  'workerDomain.nav':'Worker Domain','workerDomain.title':'Cloudflare Worker Domain','workerDomain.token':'Cloudflare API Token','workerDomain.getToken':'Get token','workerDomain.tokenHint':'The token is stored on the server and never returned to your browser.','workerDomain.deploy':'Deploy to workers.dev','workerDomain.custom':'Custom domain','workerDomain.refresh':'Refresh','workerDomain.chooseZone':'Choose a Cloudflare domain','workerDomain.deployCustom':'Create random subdomain and deploy','workerDomain.domain':'Worker domain','workerDomain.script':'Worker script','workerDomain.delete':'Delete Worker','workerDomain.configTitle':'Worker configuration','workerDomain.user':'User','workerDomain.noUsers':'No valid user configurations found.','workerDomain.copyConfig':'Copy configuration','workerDomain.enterToken':'Enter a Cloudflare token first.','workerDomain.deploying':'Deploying to Cloudflare…','workerDomain.created':'Worker created and deployed.','workerDomain.noZones':'No active domains were found in the account.','workerDomain.confirmDelete':'Delete the Worker and its attached domain?','workerDomain.deleted':'Worker deleted.','workerDomain.noConfig':'There is no configuration to copy.','workerDomain.ping':'Ping from my internet','workerDomain.pinging':'Pinging…','workerDomain.pingFailed':'Ping failed; check the domain, DNS or TLS.','workerDomain.pingResult':'Browser ping: median {median} ms · min {min} ms · max {max} ms · successful samples {samples}/4','workerDomain.notConnected':'Deploy a Worker Domain first.'
+  'workerDomain.nav':'Worker Domain','workerDomain.title':'Cloudflare Worker Domain','workerDomain.token':'Cloudflare API Token','workerDomain.getToken':'Get token','workerDomain.tokenHint':'The token is stored on the server and never returned to your browser.','workerDomain.deploy':'Deploy to workers.dev','workerDomain.custom':'Custom domain','workerDomain.addCustom':'Add custom domain','workerDomain.removeCustom':'Remove domain','workerDomain.createCustom':'Create random subdomain','workerDomain.addingCustom':'Adding custom domain…','workerDomain.customAdded':'Custom domain added to the Worker.','workerDomain.confirmRemoveCustom':'Remove the custom domain from this Worker?','workerDomain.customRemoved':'Custom domain removed; configuration switched back to workers.dev.','workerDomain.refresh':'Refresh','workerDomain.chooseZone':'Choose a Cloudflare domain','workerDomain.deployCustom':'Create random subdomain and deploy','workerDomain.domain':'Worker domain','workerDomain.script':'Worker script','workerDomain.update':'Update Worker','workerDomain.updated':'Worker updated and deployed.','workerDomain.delete':'Delete Worker','workerDomain.configTitle':'Worker configuration','workerDomain.user':'User','workerDomain.noUsers':'No valid user configurations found.','workerDomain.copyConfig':'Copy configuration','workerDomain.enterToken':'Enter a Cloudflare token first.','workerDomain.deploying':'Deploying to Cloudflare…','workerDomain.created':'Worker created and deployed.','workerDomain.noZones':'No active domains were found in the account.','workerDomain.confirmDelete':'Delete the Worker and its attached domain?','workerDomain.deleted':'Worker deleted.','workerDomain.noConfig':'There is no configuration to copy.','workerDomain.ping':'Ping from my internet','workerDomain.pinging':'Pinging…','workerDomain.pingFailed':'Ping failed; check the domain, DNS or TLS.','workerDomain.pingResult':'Browser ping: median {median} ms · min {min} ms · max {max} ms · successful samples {samples}/4','workerDomain.notConnected':'Deploy a Worker Domain first.'
 });
 
 function t(key) {
@@ -6563,7 +6560,8 @@ function renderWorkerDomain(data) {
   var connected=!!WD_STATE.connected;
   $id('wd-setup').classList.toggle('hidden',connected); $id('wd-managed').classList.toggle('hidden',!connected);
   var badge=$id('wd-badge'); badge.textContent=connected?t('connected'):t('disconnected'); badge.className='badge '+(connected?'badge-g':'badge-r');
-  var link=$id('wd-domain'); link.textContent=WD_STATE.domain||'—'; link.href=WD_STATE.url||'#';
+  var link=$id('wd-domain'), baseDomain=WD_STATE.worker_dev_domain||WD_STATE.domain; link.textContent=baseDomain||'—'; link.href=baseDomain?'https://'+baseDomain:'#';
+  var custom=String(WD_STATE.custom_domain||''), customLink=$id('wd-custom-domain'); customLink.textContent=custom; customLink.href=custom?'https://'+custom:'#'; customLink.classList.toggle('hidden',!custom); $id('wd-add-custom-btn').classList.toggle('hidden',!!custom); $id('wd-delete-custom-btn').classList.toggle('hidden',!custom); $id('wd-custom-menu').classList.add('hidden');
   $id('wd-script').textContent=WD_STATE.script_name||'—'; $id('wd-config-count').textContent=String(WD_STATE.configs.length);
   var select=$id('wd-user-select'), old=select.value; select.replaceChildren();
   WD_STATE.configs.forEach(function(item,i){var o=document.createElement('option');o.value=String(i);o.textContent=(item.username||item.user_id)+ (item.active?'':' · '+t('inactive'));select.appendChild(o);});
@@ -6574,29 +6572,44 @@ function renderWorkerDomain(data) {
   wdMessage(WD_STATE.last_error|| (connected?'': ''),!!WD_STATE.last_error);
 }
 async function loadWorkerDomain(){try{renderWorkerDomain(await api('/api/system/worker-domain'));}catch(e){wdMessage(e.message,true);}}
-async function toggleWorkerDomainMenu(){
-  var menu=$id('wd-zone-menu'); if(!menu.classList.contains('hidden')){menu.classList.add('hidden');return;}
-  var token=$id('wd-token').value.trim(); if(!token){toast(t('workerDomain.enterToken'),'err');$id('wd-token').focus();return;}
+async function toggleWorkerCustomDomainMenu(){
+  var menu=$id('wd-custom-menu'); if(!menu.classList.contains('hidden')){menu.classList.add('hidden');return;}
   try{
-    var result=await api('/api/system/worker-domain/zones',{method:'POST',body:{token:token}}), select=$id('wd-zone-select'); select.replaceChildren();
+    var result=await api('/api/system/worker-domain/zones',{method:'POST',body:{}}), select=$id('wd-custom-zone-select'); select.replaceChildren();
     (result.zones||[]).forEach(function(zone){var o=document.createElement('option');o.value=zone.id;o.dataset.accountId=zone.account_id||'';o.textContent=zone.name;select.appendChild(o);});
     if(!select.options.length){wdMessage(t('workerDomain.noZones'),true);return;}
     menu.classList.remove('hidden');wdMessage('',false);
   }catch(e){wdMessage(e.message,true);toast(e.message,'err');}
 }
-async function deployWorkerDomain(custom){
-  var input=$id('wd-token'),token=input.value.trim(),button=$id(custom?'wd-custom-btn':'wd-deploy-btn');
+async function deployWorkerDomain(){
+  var input=$id('wd-token'),token=input.value.trim(),button=$id('wd-deploy-btn');
   if(!token){toast(t('workerDomain.enterToken'),'err');input.focus();return;}
-  var zoneSelect=$id('wd-zone-select'),zoneId=custom?zoneSelect.value:'',accountId=custom?(zoneSelect.options[zoneSelect.selectedIndex].dataset.accountId||''):''; if(custom&&!zoneId){toast(t('workerDomain.noZones'),'err');return;}
   button.disabled=true;wdMessage(t('workerDomain.deploying'),false);
-  try{var result=await api('/api/system/worker-domain',{method:'POST',body:{token:token,zone_id:zoneId,account_id:accountId}});input.value='';$id('wd-zone-menu').classList.add('hidden');renderWorkerDomain(result);toast(t('workerDomain.created'),'ok');}
+  try{var result=await api('/api/system/worker-domain',{method:'POST',body:{token:token}});input.value='';renderWorkerDomain(result);toast(t('workerDomain.created'),'ok');}
   catch(e){wdMessage(e.message,true);toast(e.message,'err');}
   finally{button.disabled=false;}
+}
+async function addWorkerCustomDomain(){
+  var select=$id('wd-custom-zone-select'),zoneId=select.value,button=$id('wd-add-custom-btn');if(!zoneId){toast(t('workerDomain.noZones'),'err');return;}
+  button.disabled=true;wdMessage(t('workerDomain.addingCustom'),false);
+  try{renderWorkerDomain(await api('/api/system/worker-domain/custom-domain',{method:'POST',body:{zone_id:zoneId}}));toast(t('workerDomain.customAdded'),'ok');}
+  catch(e){wdMessage(e.message,true);toast(e.message,'err');}finally{button.disabled=false;}
+}
+async function deleteWorkerCustomDomain(){
+  if(!confirm(t('workerDomain.confirmRemoveCustom')))return;
+  try{renderWorkerDomain(await api('/api/system/worker-domain/custom-domain',{method:'DELETE'}));toast(t('workerDomain.customRemoved'),'ok');}
+  catch(e){wdMessage(e.message,true);toast(e.message,'err');}
 }
 async function deleteWorkerDomain(){
   if(!confirm(t('workerDomain.confirmDelete')))return;
   try{renderWorkerDomain(await api('/api/system/worker-domain',{method:'DELETE'}));toast(t('workerDomain.deleted'),'ok');}
   catch(e){wdMessage(e.message,true);toast(e.message,'err');}
+}
+async function updateWorkerDomain(){
+  var button=$id('wd-update-btn');button.disabled=true;wdMessage(t('workerDomain.deploying'),false);
+  try{renderWorkerDomain(await api('/api/system/worker-domain',{method:'PUT'}));toast(t('workerDomain.updated'),'ok');}
+  catch(e){wdMessage(e.message,true);toast(e.message,'err');}
+  finally{button.disabled=false;}
 }
 function selectWorkerDomainConfig(){var s=$id('wd-user-select'),o=$id('wd-config-output'),item=WD_STATE.configs[Number(s.value)];o.value=item?String(item.config||''):'';}
 async function copyWorkerDomainConfig(){var value=$id('wd-config-output').value;if(!value){toast(t('workerDomain.noConfig'),'err');return;}try{await navigator.clipboard.writeText(value);toast(t('copied'),'ok');}catch(e){$id('wd-config-output').select();document.execCommand('copy');toast(t('copied'),'ok');}}
@@ -6604,7 +6617,7 @@ async function pingWorkerDomain(){
   var button=$id('wd-ping-btn'),out=$id('wd-ping-result'),base=String(WD_STATE.url||(WD_STATE.domain?'https://'+WD_STATE.domain:'')).replace(/\/$/,'');
   if(!base||!WD_STATE.connected){wdMessage(t('workerDomain.notConnected'),true);return;}
   button.disabled=true;out.textContent=t('workerDomain.pinging');var samples=[];
-  for(var i=0;i<4;i++){var c=new AbortController(),timer=setTimeout(function(x){return function(){x.abort();};}(c),8000),start=performance.now();try{await fetch(base+'/_spider-health?cb='+Date.now()+'-'+i,{method:'GET',mode:'no-cors',cache:'no-store',signal:c.signal});samples.push(Math.round(performance.now()-start));}catch(_){}finally{clearTimeout(timer);}if(i<3)await new Promise(function(resolve){setTimeout(resolve,180);});}
+  for(var i=0;i<4;i++){var c=new AbortController(),timer=setTimeout(function(x){return function(){x.abort();};}(c),8000),start=performance.now();try{var response=await fetch(base+'/_spider-health?cb='+Date.now()+'-'+i,{method:'GET',mode:'cors',cache:'no-store',signal:c.signal});if(response.ok)samples.push(Math.round(performance.now()-start));}catch(_){}finally{clearTimeout(timer);}if(i<3)await new Promise(function(resolve){setTimeout(resolve,180);});}
   button.disabled=false;if(!samples.length){out.textContent=t('workerDomain.pingFailed');return;}samples.sort(function(a,b){return a-b;});var mid=samples.length%2?samples[(samples.length-1)/2]:Math.round((samples[samples.length/2-1]+samples[samples.length/2])/2);out.textContent=t('workerDomain.pingResult').replace('{median}',mid).replace('{min}',samples[0]).replace('{max}',samples[samples.length-1]).replace('{samples}',samples.length);
 }
 
