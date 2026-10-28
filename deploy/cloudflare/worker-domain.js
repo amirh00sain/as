@@ -18,6 +18,7 @@ export default {
     try {
       const incoming = new URL(request.url);
       if (incoming.pathname === '/_spider-health') return healthResponse();
+      if (incoming.pathname === '/') return healthResponse();
 
       const prefix = `${RELAY_PATH}/`;
       if (incoming.pathname !== RELAY_PATH && !incoming.pathname.startsWith(prefix)) {
