@@ -1,4 +1,8 @@
 <div align="center">
+  <h1><a href="https://spiderpanel.xfdscscsa.de5.net/">Spider Panel</a></h1>
+</div>
+
+<div align="center">
   <img src="svg/hero.svg" alt="SpiderPanel — modern control panel and network operations" width="100%" />
 
   <p>
