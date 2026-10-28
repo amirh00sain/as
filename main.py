@@ -13643,7 +13643,7 @@ def _worker_domain_public() -> dict:
                 config = _vercel_config_for_user(str(uid), user, domain).replace("%20Vercel", "%20Cloudflare%20Worker")
                 if config:
                     configs.append({"user_id": str(uid), "username": str(user.get("username") or uid), "active": str(user.get("status") or "active").lower() == "active", "config": config})
-    return {"ok": True, "connected": connected, "domain": domain, "worker_dev_domain": worker_dev_domain, "url": f"https://{domain}" if domain else "", "account_id": CF_DOMAIN.get("account_id", ""), "script_name": CF_DOMAIN.get("script_name", ""), "custom_domain": custom_domain, "created_at": CF_DOMAIN.get("created_at", ""), "last_error": CF_DOMAIN.get("last_error", ""), "configs": configs}
+    return {"ok": True, "connected": connected, "domain": domain, "worker_dev_domain": worker_dev_domain, "url": f"https://{domain}" if domain else "", "account_id": CF_DOMAIN.get("account_id", ""), "script_name": CF_DOMAIN.get("script_name", ""), "custom_domain": custom_domain, "custom_domain_id": CF_DOMAIN.get("custom_domain_id", ""), "created_at": CF_DOMAIN.get("created_at", ""), "last_error": CF_DOMAIN.get("last_error", ""), "configs": configs}
 
 
 async def _upload_worker_domain_script(token: str, account_id: str, script_name: str) -> None:
@@ -13770,12 +13770,16 @@ async def worker_domain_add_custom(request: Request, _=Depends(require_auth)):
     errors = []
     for letter in random.sample("abcdefghijklmnopqrstuvwxyz", 26):
         hostname = f"{letter}.{zone_name}"
-        code, data = await _cf_api("POST", f"/accounts/{account_id}/workers/domains", token, {"hostname": hostname, "service": script_name, "environment": "production"})
+        code, data = await _cf_api("PUT", f"/accounts/{account_id}/workers/domains", token, {"hostname": hostname, "service": script_name, "zone_id": zone_id, "zone_name": zone_name, "enabled": True, "previews_enabled": False})
         if code in (200, 201) and isinstance(data, dict) and data.get("success"):
-            CF_DOMAIN.update({"custom_domain": hostname, "domain": hostname, "url": f"https://{hostname}"})
+            custom_result = data.get("result") or {}
+            CF_DOMAIN.update({"custom_domain": hostname, "custom_domain_id": str(custom_result.get("id") or ""), "domain": hostname, "url": f"https://{hostname}"})
             await save_state()
             return _worker_domain_public()
-        errors.append(str(((data.get("errors") or [{}])[0].get("message") if isinstance(data, dict) else "") or ""))
+        error_message = str(((data.get("errors") or [{}])[0].get("message") if isinstance(data, dict) else "") or "")
+        errors.append(error_message)
+        if code in (401, 403, 405) or "authentication scheme" in error_message.lower() or "permission" in error_message.lower():
+            break
     raise HTTPException(status_code=502, detail="Could not add a random subdomain: " + (errors[-1] if errors else "Cloudflare rejected the request")[:250])
 
 
@@ -13785,7 +13789,14 @@ async def worker_domain_remove_custom(_=Depends(require_auth)):
     custom_domain = str(CF_DOMAIN.get("custom_domain") or "")
     if not (CF_DOMAIN.get("connected") and token and account_id and custom_domain):
         raise HTTPException(status_code=400, detail="No custom domain is connected")
-    code, data = await _cf_api("DELETE", f"/accounts/{account_id}/workers/domains/{custom_domain}", token)
+    custom_domain_id = str(CF_DOMAIN.get("custom_domain_id") or "")
+    if not custom_domain_id:
+        lcode, ldata = await _cf_api("GET", f"/accounts/{account_id}/workers/domains", token)
+        entries = (ldata.get("result") or []) if isinstance(ldata, dict) else []
+        custom_domain_id = str(next((x.get("id") for x in entries if str(x.get("hostname") or "").lower() == custom_domain.lower() and str(x.get("service") or "") == str(CF_DOMAIN.get("script_name") or "")), "") or "")
+        if lcode != 200 or not custom_domain_id:
+            raise HTTPException(status_code=502, detail="Could not find the custom domain ID in Cloudflare")
+    code, data = await _cf_api("DELETE", f"/accounts/{account_id}/workers/domains/{custom_domain_id}", token)
     if code not in (200, 204) and not (isinstance(data, dict) and data.get("success")):
         raise HTTPException(status_code=502, detail="Cloudflare could not remove the custom domain")
     base_domain = str(CF_DOMAIN.get("worker_dev_domain") or "")
@@ -13795,7 +13806,7 @@ async def worker_domain_remove_custom(_=Depends(require_auth)):
         if scode != 200 or not subdomain:
             raise HTTPException(status_code=502, detail="Custom domain was removed, but workers.dev fallback could not be resolved")
         base_domain = f"{CF_DOMAIN.get('script_name')}.{subdomain}.workers.dev"
-    CF_DOMAIN.update({"custom_domain": "", "domain": base_domain, "worker_dev_domain": base_domain, "url": f"https://{base_domain}"})
+    CF_DOMAIN.update({"custom_domain": "", "custom_domain_id": "", "domain": base_domain, "worker_dev_domain": base_domain, "url": f"https://{base_domain}"})
     await save_state()
     return _worker_domain_public()
 
@@ -13807,14 +13818,21 @@ async def worker_domain_delete(_=Depends(require_auth)):
     if not (CF_DOMAIN.get("connected") and token and account_id and script_name):
         raise HTTPException(status_code=400, detail="No Worker Domain is connected")
     if CF_DOMAIN.get("custom_domain") and domain:
-        dcode, ddata = await _cf_api("DELETE", f"/accounts/{account_id}/workers/domains/{domain}", token)
+        custom_domain_id = str(CF_DOMAIN.get("custom_domain_id") or "")
+        if not custom_domain_id:
+            lcode, ldata = await _cf_api("GET", f"/accounts/{account_id}/workers/domains", token)
+            entries = (ldata.get("result") or []) if isinstance(ldata, dict) else []
+            custom_domain_id = str(next((x.get("id") for x in entries if str(x.get("hostname") or "").lower() == domain.lower() and str(x.get("service") or "") == script_name), "") or "")
+            if lcode != 200 or not custom_domain_id:
+                raise HTTPException(status_code=502, detail="Could not find the custom domain ID in Cloudflare")
+        dcode, ddata = await _cf_api("DELETE", f"/accounts/{account_id}/workers/domains/{custom_domain_id}", token)
         if dcode not in (200, 204) and not (isinstance(ddata, dict) and ddata.get("success")):
             raise HTTPException(status_code=502, detail="Cloudflare could not remove the custom domain")
     code, data = await _cf_api("DELETE", f"/accounts/{account_id}/workers/scripts/{script_name}", token)
     if code not in (200, 204) and not (isinstance(data, dict) and data.get("success")):
         raise HTTPException(status_code=502, detail="Cloudflare could not delete the Worker")
     async with CF_DOMAIN_LOCK:
-        CF_DOMAIN.update({"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "worker_dev_domain": "", "url": "", "custom_domain": "", "created_at": "", "last_error": ""})
+        CF_DOMAIN.update({"connected": False, "deploying": False, "token": "", "account_id": "", "script_name": "", "domain": "", "worker_dev_domain": "", "url": "", "custom_domain": "", "custom_domain_id": "", "created_at": "", "last_error": ""})
     await save_state()
     return _worker_domain_public()
 
