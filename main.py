@@ -13704,7 +13704,10 @@ async def worker_domain_deploy(request: Request, _=Depends(require_auth)):
         if not account_id:
             raise ValueError("No Cloudflare account is available to this token")
         await _upload_worker_domain_script(token, account_id, script_name)
-        await _cf_api("PUT", f"/accounts/{account_id}/workers/scripts/{script_name}/subdomain", token, {"enabled": True, "previews_enabled": False})
+        enable_code, enable_data = await _cf_api("POST", f"/accounts/{account_id}/workers/scripts/{script_name}/subdomain", token, {"enabled": True, "previews_enabled": False})
+        if enable_code not in (200, 201) or not isinstance(enable_data, dict) or not enable_data.get("success") or not (enable_data.get("result") or {}).get("enabled"):
+            message = str(((enable_data.get("errors") or [{}])[0].get("message") if isinstance(enable_data, dict) else "") or enable_data or "Cloudflare rejected workers.dev activation")
+            raise ValueError("Could not enable this Worker on workers.dev: " + message[:300])
         scode, sdata = await _cf_api("GET", f"/accounts/{account_id}/workers/subdomain", token)
         subdomain = str(((sdata.get("result") or {}).get("subdomain")) if isinstance(sdata, dict) else "")
         if scode != 200 or not subdomain:
@@ -13741,6 +13744,10 @@ async def worker_domain_update(_=Depends(require_auth)):
         CF_DOMAIN["last_error"] = ""
     try:
         await _upload_worker_domain_script(token, account_id, script_name)
+        enable_code, enable_data = await _cf_api("POST", f"/accounts/{account_id}/workers/scripts/{script_name}/subdomain", token, {"enabled": True, "previews_enabled": False})
+        if enable_code not in (200, 201) or not isinstance(enable_data, dict) or not enable_data.get("success") or not (enable_data.get("result") or {}).get("enabled"):
+            message = str(((enable_data.get("errors") or [{}])[0].get("message") if isinstance(enable_data, dict) else "") or enable_data or "Cloudflare rejected workers.dev activation")
+            raise ValueError("Could not enable this Worker on workers.dev: " + message[:300])
         async with CF_DOMAIN_LOCK:
             CF_DOMAIN.update({"deploying": False, "last_error": "", "updated_at": now_ir().isoformat(timespec="seconds")})
         await save_state()
